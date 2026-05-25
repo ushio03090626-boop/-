@@ -358,8 +358,6 @@ async function scanDir(dirHandle, path, stats) {
         const file = await handle.getFile();
         stats.size += file.size;
         let reasons;
-
-        let reasons;
         if (gMode === 'deep') {
           setStep(`チェック中: ${name}`);
           reasons = await deepCheck(file);
