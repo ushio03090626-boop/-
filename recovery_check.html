@@ -392,6 +392,7 @@ async function scanDir(dirHandle, path, stats) {
         stats.corrupted.push({ path: full, size: 0, reasons: ['アクセス不可'] });
       }
     }
+    }
   } catch {
     // entries() itself failed — record this folder as unreadable
     stats.errorFolders.push(path);
