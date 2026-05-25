@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>データ復旧チェックツール</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  background: #f0f2f5;
+  color: #333;
+  min-height: 100vh;
+}
+.wrap { max-width: 900px; margin: 0 auto; padding: 24px; }
+
+/* ── Landing ── */
+.landing { text-align: center; padding-top: 80px; }
+.landing h1 { font-size: 2rem; color: #2c3e50; margin-bottom: 10px; }
+.landing .sub { color: #888; margin-bottom: 50px; }
+.btn-main {
+  display: inline-flex; align-items: center; gap: 10px;
+  background: #3498db; color: #fff; border: none;
+  padding: 16px 40px; border-radius: 50px;
+  font-size: 1.1rem; font-weight: bold; cursor: pointer;
+  transition: background .2s, transform .1s;
+}
+.btn-main:hover { background: #2980b9; }
+.btn-main:active { transform: scale(.97); }
+.browser-note {
+  margin-top: 24px; font-size: .82rem; color: #aaa;
+  background: #fff; display: inline-block; padding: 8px 18px;
+  border-radius: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08);
+}
+
+/* ── Scanning ── */
+.scanning { text-align: center; padding-top: 80px; }
+.scanning h2 { font-size: 1.4rem; color: #2c3e50; margin-bottom: 32px; }
+.scan-num { font-size: 4rem; font-weight: 700; color: #3498db; line-height: 1; }
+.scan-unit { color: #888; margin: 6px 0 24px; }
+.spinner {
+  width: 40px; height: 40px; border: 4px solid #e0e0e0;
+  border-top-color: #3498db; border-radius: 50%;
+  animation: spin .8s linear infinite; margin: 0 auto 20px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.scan-path {
+  font-size: .78rem; color: #bbb; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; padding: 0 40px;
+}
+
+/* ── Results ── */
+.actions { display: flex; justify-content: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.btn-again {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #ecf0f1; color: #555; border: none;
+  padding: 12px 24px; border-radius: 50px; cursor: pointer;
+  font-size: .95rem; transition: background .2s;
+}
+.btn-again:hover { background: #dfe6e9; }
+.btn-save {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #27ae60; color: #fff; border: none;
+  padding: 12px 28px; border-radius: 50px; cursor: pointer;
+  font-size: .95rem; font-weight: bold; transition: background .2s;
+}
+.btn-save:hover { background: #219a52; }
+.card {
+  background: #fff; border-radius: 12px; padding: 22px;
+  margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,.07);
+}
+.card h2 {
+  font-size: 1rem; color: #2c3e50;
+  border-bottom: 2px solid #eee; padding-bottom: 8px; margin-bottom: 16px;
+}
+.meta { color: #888; font-size: .85rem; margin-bottom: 4px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; }
+.stat { text-align: center; background: #f8f9fa; border-radius: 8px; padding: 14px; }
+.stat .val { font-size: 1.9rem; font-weight: 700; }
+.stat .lbl { font-size: .8rem; color: #666; margin-top: 4px; }
+.rate-num { font-size: 3.5rem; font-weight: 700; text-align: center; }
+.bar-bg { background: #e9ecef; border-radius: 50px; height: 18px; overflow: hidden; margin: 14px 0; }
+.bar-fill { height: 100%; border-radius: 50px; }
+.rate-sub { text-align: center; font-size: .9rem; color: #555; }
+.scroll { max-height: 320px; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .83rem; }
+th {
+  background: #f8f9fa; padding: 8px 10px;
+  text-align: left; font-weight: 600; color: #555; border-bottom: 2px solid #eee;
+}
+td { border-bottom: 1px solid #f0f0f0; }
+tr:hover td { background: #fafafa; }
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 12px;
+  font-size: .8em; font-weight: bold; white-space: nowrap;
+}
+.badge-zero  { background: #fff3cd; color: #856404; }
+.badge-unread { background: #f8d7da; color: #842029; }
+.no-files { text-align: center; color: #aaa; padding: 20px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ① Landing -->
+  <div id="s-landing" class="landing">
+    <h1>データ復旧チェックツール</h1>
+    <p class="sub">外付けHDD・USBメモリの復旧状態を確認します</p>
+    <button class="btn-main" onclick="startScan()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+      </svg>
+      フォルダーを選択
+    </button>
+    <div class="browser-note">Chrome または Edge で開いてください（Firefox・Safari は非対応）</div>
+  </div>
+
+  <!-- ② Scanning -->
+  <div id="s-scanning" class="scanning" style="display:none;">
+    <h2>スキャン中...</h2>
+    <div class="spinner"></div>
+    <div class="scan-num" id="scan-num">0</div>
+    <div class="scan-unit">ファイルを確認しました</div>
+    <div class="scan-path" id="scan-path"></div>
+  </div>
+
+  <!-- ③ Results -->
+  <div id="s-results" style="display:none;">
+    <div class="actions">
+      <button class="btn-again" onclick="reset()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        別のフォルダをチェック
+      </button>
+      <button class="btn-save" onclick="saveReport()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        レポートをHTMLで保存
+      </button>
+    </div>
+    <div id="results"></div>
+  </div>
+
+</div>
+
+<script>
+let gStats = null;
+let gPath = '';
+
+function formatSize(b) {
+  const u = ['B','KB','MB','GB','TB'];
+  let i = 0;
+  while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+  return `${b.toFixed(2)} ${u[i]}`;
+}
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function scanDir(dirHandle, path, stats) {
+  for await (const [name, handle] of dirHandle.entries()) {
+    const full = path ? `${path}/${name}` : name;
+    if (handle.kind === 'directory') {
+      stats.folders++;
+      await scanDir(handle, full, stats);
+    } else {
+      stats.files++;
+      if (stats.files % 20 === 0) {
+        document.getElementById('scan-num').textContent = stats.files.toLocaleString();
+        document.getElementById('scan-path').textContent = full;
+        await new Promise(r => setTimeout(r, 0));
+      }
+      try {
+        const file = await handle.getFile();
+        stats.size += file.size;
+        if (file.size === 0) {
+          stats.corrupted.push({ path: full, size: 0, reason: '0バイト' });
+        } else {
+          try {
+            await file.slice(0, 1).arrayBuffer();
+            stats.normal++;
+          } catch {
+            stats.corrupted.push({ path: full, size: file.size, reason: '読み取り不可' });
+          }
+        }
+      } catch {
+        stats.corrupted.push({ path: full, size: 0, reason: 'アクセス不可' });
+      }
+    }
+  }
+}
+
+async function startScan() {
+  if (!window.showDirectoryPicker) {
+    alert('このツールは Chrome または Edge が必要です。\n現在のブラウザには対応していません。');
+    return;
+  }
+  let dir;
+  try {
+    dir = await window.showDirectoryPicker({ mode: 'read' });
+  } catch (e) {
+    if (e.name !== 'AbortError') alert('フォルダーを開けませんでした。');
+    return;
+  }
+  gPath = dir.name;
+  show('s-scanning');
+  document.getElementById('scan-num').textContent = '0';
+  document.getElementById('scan-path').textContent = '';
+
+  const stats = { folders: 0, files: 0, size: 0, normal: 0, corrupted: [] };
+  await scanDir(dir, '', stats);
+
+  gStats = stats;
+  document.getElementById('scan-num').textContent = stats.files.toLocaleString();
+  renderResults(stats);
+  show('s-results');
+}
+
+function renderResults(s) {
+  const total    = s.files;
+  const normal   = s.normal;
+  const corrupted = s.corrupted.length;
+  const rate     = total > 0 ? normal / total * 100 : 0;
+  const [color, status] = rate >= 90 ? ['#27ae60','良好'] : rate >= 70 ? ['#f39c12','注意'] : ['#e74c3c','要確認'];
+  const now = new Date().toLocaleString('ja-JP');
+
+  const rows = corrupted === 0
+    ? `<tr><td colspan="3" class="no-files">破損ファイルはありません</td></tr>`
+    : s.corrupted.map(f => {
+        const cls = f.reason === '0バイト' ? 'badge-zero' : 'badge-unread';
+        return `<tr>
+          <td style="word-break:break-all;padding:6px 10px;color:#555;">${esc(f.path)}</td>
+          <td style="padding:6px 10px;"><span class="badge ${cls}">${esc(f.reason)}</span></td>
+          <td style="padding:6px 10px;text-align:right;color:#888;">${formatSize(f.size)}</td>
+        </tr>`;
+      }).join('');
+
+  document.getElementById('results').innerHTML = `
+    <div class="card">
+      <p class="meta">対象: ${esc(gPath)}</p>
+      <p class="meta">チェック日時: ${now}</p>
+    </div>
+    <div class="card">
+      <h2>サマリー</h2>
+      <div class="grid">
+        <div class="stat"><div class="val">${s.folders.toLocaleString()}</div><div class="lbl">総フォルダー数</div></div>
+        <div class="stat"><div class="val">${total.toLocaleString()}</div><div class="lbl">総ファイル数</div></div>
+        <div class="stat"><div class="val">${formatSize(s.size)}</div><div class="lbl">総容量</div></div>
+        <div class="stat"><div class="val" style="color:#27ae60">${normal.toLocaleString()}</div><div class="lbl">正常ファイル数</div></div>
+        <div class="stat"><div class="val" style="color:#e74c3c">${corrupted.toLocaleString()}</div><div class="lbl">破損ファイル数</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>復旧率</h2>
+      <div class="rate-num" style="color:${color}">${rate.toFixed(1)}%</div>
+      <div class="bar-bg"><div class="bar-fill" style="width:${rate.toFixed(1)}%;background:${color}"></div></div>
+      <p class="rate-sub">ステータス: <strong>${status}</strong> &nbsp;|&nbsp; 正常 ${normal.toLocaleString()} / 総ファイル ${total.toLocaleString()}</p>
+    </div>
+    <div class="card">
+      <h2>破損ファイル一覧（${corrupted.toLocaleString()} 件）</h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>ファイルパス</th><th>原因</th><th style="text-align:right">サイズ</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function saveReport() {
+  const s = gStats;
+  const total    = s.files;
+  const normal   = s.normal;
+  const corrupted = s.corrupted.length;
+  const rate     = total > 0 ? normal / total * 100 : 0;
+  const [color, status] = rate >= 90 ? ['#27ae60','良好'] : rate >= 70 ? ['#f39c12','注意'] : ['#e74c3c','要確認'];
+  const now = new Date().toLocaleString('ja-JP');
+
+  const rows = corrupted === 0
+    ? `<tr><td colspan="3" style="text-align:center;color:#aaa;padding:20px;">破損ファイルはありません</td></tr>`
+    : s.corrupted.map(f => {
+        const bg = f.reason === '0バイト' ? '#fff3cd' : '#f8d7da';
+        const fc = f.reason === '0バイト' ? '#856404' : '#842029';
+        return `<tr>
+          <td style="word-break:break-all;padding:6px 10px;color:#555;">${esc(f.path)}</td>
+          <td style="padding:6px 10px;white-space:nowrap;"><span style="background:${bg};color:${fc};padding:2px 8px;border-radius:12px;font-size:.8em;font-weight:bold;">${esc(f.reason)}</span></td>
+          <td style="padding:6px 10px;text-align:right;color:#888;">${formatSize(f.size)}</td>
+        </tr>`;
+      }).join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8"><title>復旧レポート</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Helvetica Neue',Arial,sans-serif;background:#f0f2f5;color:#333;padding:24px}h1{text-align:center;color:#2c3e50;font-size:1.7rem;margin-bottom:28px}.w{max-width:900px;margin:0 auto}.c{background:#fff;border-radius:12px;padding:22px;margin-bottom:20px;box-shadow:0 2px 10px rgba(0,0,0,.07)}.c h2{font-size:1rem;color:#2c3e50;border-bottom:2px solid #eee;padding-bottom:8px;margin-bottom:16px}.m{color:#888;font-size:.85rem;margin-bottom:4px}.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px}.s{text-align:center;background:#f8f9fa;border-radius:8px;padding:14px}.s .v{font-size:1.9rem;font-weight:700}.s .l{font-size:.8rem;color:#666;margin-top:4px}.rn{font-size:3.5rem;font-weight:700;text-align:center}.bb{background:#e9ecef;border-radius:50px;height:18px;overflow:hidden;margin:14px 0}.bf{height:100%;border-radius:50px}.rs{text-align:center;font-size:.9rem;color:#555}table{width:100%;border-collapse:collapse;font-size:.83rem}th{background:#f8f9fa;padding:8px 10px;text-align:left;font-weight:600;color:#555;border-bottom:2px solid #eee}td{border-bottom:1px solid #f0f0f0}.sc{max-height:320px;overflow-y:auto}</style>
+</head><body><div class="w">
+<h1>データ復旧チェックレポート</h1>
+<div class="c"><p class="m">対象: ${esc(gPath)}</p><p class="m">チェック日時: ${now}</p></div>
+<div class="c"><h2>サマリー</h2><div class="g">
+<div class="s"><div class="v">${s.folders.toLocaleString()}</div><div class="l">総フォルダー数</div></div>
+<div class="s"><div class="v">${total.toLocaleString()}</div><div class="l">総ファイル数</div></div>
+<div class="s"><div class="v">${formatSize(s.size)}</div><div class="l">総容量</div></div>
+<div class="s"><div class="v" style="color:#27ae60">${normal.toLocaleString()}</div><div class="l">正常ファイル数</div></div>
+<div class="s"><div class="v" style="color:#e74c3c">${corrupted.toLocaleString()}</div><div class="l">破損ファイル数</div></div>
+</div></div>
+<div class="c"><h2>復旧率</h2>
+<div class="rn" style="color:${color}">${rate.toFixed(1)}%</div>
+<div class="bb"><div class="bf" style="width:${rate.toFixed(1)}%;background:${color}"></div></div>
+<p class="rs">ステータス: <strong>${status}</strong> &nbsp;|&nbsp; 正常 ${normal.toLocaleString()} / 総ファイル ${total.toLocaleString()}</p></div>
+<div class="c"><h2>破損ファイル一覧（${corrupted.toLocaleString()} 件）</h2>
+<div class="sc"><table><thead><tr><th>ファイルパス</th><th>原因</th><th style="text-align:right">サイズ</th></tr></thead>
+<tbody>${rows}</tbody></table></div></div>
+</div></body></html>`;
+
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const ts   = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  a.href = url;
+  a.download = `recovery_report_${ts}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function reset() {
+  gStats = null; gPath = '';
+  show('s-landing');
+}
+
+function show(id) {
+  for (const s of ['s-landing','s-scanning','s-results'])
+    document.getElementById(s).style.display = s === id ? '' : 'none';
+}
+</script>
+</body>
+</html>
