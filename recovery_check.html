@@ -342,12 +342,19 @@ function setDetail(text) { document.getElementById('scan-detail').textContent = 
 
 // ── Directory walk ─────────────────────────────────────────────────────────
 async function scanDir(dirHandle, path, stats) {
-  for await (const [name, handle] of dirHandle.entries()) {
-    const full = path ? `${path}/${name}` : name;
-    if (handle.kind === 'directory') {
-      stats.folders++;
-      await scanDir(handle, full, stats);
-    } else {
+  let entryCount = 0;
+  try {
+    for await (const [name, handle] of dirHandle.entries()) {
+      entryCount++;
+      const full = path ? `${path}/${name}` : name;
+      if (handle.kind === 'directory') {
+        stats.folders++;
+        try {
+          await scanDir(handle, full, stats);
+        } catch {
+          stats.errorFolders.push(full);
+        }
+      } else {
       stats.files++;
       document.getElementById('scan-num').textContent = stats.files.toLocaleString();
       setDetail(full);
@@ -385,6 +392,13 @@ async function scanDir(dirHandle, path, stats) {
         stats.corrupted.push({ path: full, size: 0, reasons: ['アクセス不可'] });
       }
     }
+  } catch {
+    // entries() itself failed — record this folder as unreadable
+    stats.errorFolders.push(path);
+  }
+  // folder had entries but contained no files (all were subdirs or truly empty)
+  if (entryCount === 0 && path !== '') {
+    stats.emptyFolders.push(path);
   }
 }
 
@@ -412,7 +426,7 @@ async function startScan() {
   document.getElementById('scan-num').textContent = '0';
   setStep(''); setDetail('');
 
-  const stats = { folders:0, files:0, size:0, normal:0, corrupted:[], thumbnails:[] };
+  const stats = { folders:0, files:0, size:0, normal:0, corrupted:[], thumbnails:[], emptyFolders:[], errorFolders:[] };
   await scanDir(dir, '', stats);
   gStats = stats;
   renderResults(stats);
@@ -451,6 +465,15 @@ function buildThumbnailRows(thumbnails) {
   </tr>`).join('');
 }
 
+function folderListCard(title, folders, borderColor) {
+  if (!folders || folders.length === 0) return '';
+  const rows = folders.map(p => `<tr><td style="word-break:break-all;padding:6px 10px;color:#555;">${esc(p)}</td></tr>`).join('');
+  return `<div class="card" style="border-left:4px solid ${borderColor};">
+    <h2>${title}（${folders.length.toLocaleString()} 件）</h2>
+    <div class="scroll"><table><thead><tr><th>フォルダーパス</th></tr></thead><tbody>${rows}</tbody></table></div>
+  </div>`;
+}
+
 function renderResults(s) {
   const total     = s.files, normal = s.normal, corrupted = s.corrupted.length;
   const thumbs    = (s.thumbnails || []).length;
@@ -471,6 +494,8 @@ function renderResults(s) {
         </table>
       </div>
     </div>` : '';
+  const errorFolderCard  = folderListCard('読み取り不可フォルダー', s.errorFolders,  '#e74c3c');
+  const emptyFolderCard  = folderListCard('空フォルダー（ファイルなし）', s.emptyFolders, '#f39c12');
 
   document.getElementById('results').innerHTML = `
     <div class="card">
@@ -504,7 +529,9 @@ function renderResults(s) {
         </table>
       </div>
     </div>
-    ${thumbCard}`;
+    ${thumbCard}
+    ${errorFolderCard}
+    ${emptyFolderCard}`;
 }
 
 // ── Save report ────────────────────────────────────────────────────────────
