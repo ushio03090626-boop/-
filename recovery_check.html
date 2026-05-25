@@ -129,6 +129,7 @@ tr:hover td { background: #fafafa; }
           <li>✓ ファイルヘッダー検証（30種類以上）</li>
           <li>✓ 末尾データ欠損（切断）検出</li>
           <li>✓ 画像デコード検証</li>
+          <li>✓ サムネイル画像識別（100〜999px）</li>
         </ul>
         <span class="tag tag-deep">低速・高精度</span>
       </div>
@@ -278,21 +279,28 @@ async function endOk(file, type) {
 // ── Canvas image decode ────────────────────────────────────────────────────
 const CANVAS_LIMIT = 100 * 1024 * 1024; // 100 MB
 
-function canvasDecode(file) {
+function getImageInfo(file) {
   return new Promise(resolve => {
-    const url   = URL.createObjectURL(file);
-    const img   = new Image();
-    const done  = ok => { URL.revokeObjectURL(url); resolve(ok); };
-    const timer = setTimeout(() => done(false), 10000);
-    img.onload  = () => { clearTimeout(timer); done(true);  };
-    img.onerror = () => { clearTimeout(timer); done(false); };
+    const url  = URL.createObjectURL(file);
+    const img  = new Image();
+    const done = (ok, w, h) => { URL.revokeObjectURL(url); resolve({ ok, w, h }); };
+    const timer = setTimeout(() => done(false, 0, 0), 10000);
+    img.onload  = () => { clearTimeout(timer); done(true,  img.naturalWidth, img.naturalHeight); };
+    img.onerror = () => { clearTimeout(timer); done(false, 0, 0); };
     img.src = url;
   });
 }
 
+function isThumbnailSize(w, h) {
+  return w >= 100 && w <= 999 && h >= 100 && h <= 999;
+}
+
 // ── Deep check (called per file in deep mode) ──────────────────────────────
+// Returns { reasons[], isThumbnail, w, h }
 async function deepCheck(file) {
-  if (file.size === 0) return ['0バイト'];
+  const none = { reasons:[], isThumbnail:false, w:0, h:0 };
+  if (file.size === 0) return { reasons:['0バイト'], isThumbnail:false, w:0, h:0 };
+
   const e   = fileExt(file.name);
   const sig = SIGS[e];
   const reasons = [];
@@ -301,12 +309,12 @@ async function deepCheck(file) {
   if (sig) {
     let buf;
     try { buf = await file.slice(0, 16).arrayBuffer(); }
-    catch { return ['読み取り不可']; }
+    catch { return { reasons:['読み取り不可'], isThumbnail:false, w:0, h:0 }; }
     if (!headerOk(new Uint8Array(buf), sig))
       reasons.push('ヘッダー異常（形式不一致）');
   } else {
     try { await file.slice(0, 1).arrayBuffer(); }
-    catch { return ['読み取り不可']; }
+    catch { return { reasons:['読み取り不可'], isThumbnail:false, w:0, h:0 }; }
   }
 
   // 2. End marker (only if header passed)
@@ -315,13 +323,19 @@ async function deepCheck(file) {
     catch { /* ignore */ }
   }
 
-  // 3. Canvas decode (only if no issues yet and size within limit)
+  // 3. Image decode + dimension check (only if no issues yet and size within limit)
   if (sig?.canvas && reasons.length === 0 && file.size <= CANVAS_LIMIT) {
     setStep(`画像デコード確認中: ${file.name}`);
-    if (!await canvasDecode(file)) reasons.push('画像として読み込み不可（内部データ破損）');
+    const { ok, w, h } = await getImageInfo(file);
+    if (!ok) {
+      reasons.push('画像として読み込み不可（内部データ破損）');
+    } else if (isThumbnailSize(w, h)) {
+      return { reasons: [], isThumbnail: true, w, h };
+    }
+    return { reasons, isThumbnail: false, w, h };
   }
 
-  return reasons;
+  return { reasons, isThumbnail: false, w: 0, h: 0 };
 }
 
 // ── Scan progress helpers ──────────────────────────────────────────────────
@@ -349,19 +363,27 @@ async function scanDir(dirHandle, path, stats) {
 
         if (gMode === 'deep') {
           setStep(`チェック中: ${name}`);
-          reasons = await deepCheck(file);
+          const result = await deepCheck(file);
           setStep('');
+          if (result.isThumbnail) {
+            stats.thumbnails.push({ path: full, size: file.size, w: result.w, h: result.h });
+            stats.normal++;
+          } else if (result.reasons.length === 0) {
+            stats.normal++;
+          } else {
+            stats.corrupted.push({ path: full, size: file.size, reasons: result.reasons });
+          }
         } else {
+          let reasons;
           if (file.size === 0) {
             reasons = ['0バイト'];
           } else {
             try { await file.slice(0, 1).arrayBuffer(); reasons = []; }
             catch { reasons = ['読み取り不可']; }
           }
+          if (reasons.length === 0) stats.normal++;
+          else stats.corrupted.push({ path: full, size: file.size, reasons });
         }
-
-        if (reasons.length === 0) stats.normal++;
-        else stats.corrupted.push({ path: full, size: file.size, reasons });
 
       } catch {
         stats.corrupted.push({ path: full, size: 0, reasons: ['アクセス不可'] });
@@ -394,7 +416,7 @@ async function startScan() {
   document.getElementById('scan-num').textContent = '0';
   setStep(''); setDetail('');
 
-  const stats = { folders:0, files:0, size:0, normal:0, corrupted:[] };
+  const stats = { folders:0, files:0, size:0, normal:0, corrupted:[], thumbnails:[] };
   await scanDir(dir, '', stats);
   gStats = stats;
   renderResults(stats);
@@ -423,12 +445,36 @@ function buildRows(corrupted) {
   }).join('');
 }
 
+function buildThumbnailRows(thumbnails) {
+  if (thumbnails.length === 0)
+    return `<tr><td colspan="4" class="no-files">サムネイル画像はありません</td></tr>`;
+  return thumbnails.map(f => `<tr>
+    <td style="word-break:break-all;padding:6px 10px;color:#555;">${esc(f.path)}</td>
+    <td style="padding:6px 10px;text-align:center;color:#888;">${f.w} × ${f.h}</td>
+    <td style="padding:6px 10px;text-align:right;color:#888;">${fmt(f.size)}</td>
+  </tr>`).join('');
+}
+
 function renderResults(s) {
-  const total = s.files, normal = s.normal, corrupted = s.corrupted.length;
-  const rate  = total > 0 ? normal / total * 100 : 0;
+  const total     = s.files, normal = s.normal, corrupted = s.corrupted.length;
+  const thumbs    = (s.thumbnails || []).length;
+  const rate      = total > 0 ? normal / total * 100 : 0;
   const [color, status] = rate>=90 ? ['#27ae60','良好'] : rate>=70 ? ['#f39c12','注意'] : ['#e74c3c','要確認'];
-  const now   = new Date().toLocaleString('ja-JP');
+  const now       = new Date().toLocaleString('ja-JP');
   const modeLabel = gMode === 'deep' ? '詳細スキャン' : '通常スキャン';
+  const thumbStat = gMode === 'deep'
+    ? `<div class="stat"><div class="val" style="color:#e67e22">${thumbs.toLocaleString()}</div><div class="lbl">サムネイル画像数</div></div>`
+    : '';
+  const thumbCard = gMode === 'deep' ? `
+    <div class="card">
+      <h2>サムネイル画像一覧（${thumbs.toLocaleString()} 件）<span style="font-size:.78rem;font-weight:normal;color:#aaa;margin-left:8px;">100〜999px × 100〜999px</span></h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>ファイルパス</th><th style="text-align:center">サイズ（px）</th><th style="text-align:right">容量</th></tr></thead>
+          <tbody>${buildThumbnailRows(s.thumbnails || [])}</tbody>
+        </table>
+      </div>
+    </div>` : '';
 
   document.getElementById('results').innerHTML = `
     <div class="card">
@@ -444,6 +490,7 @@ function renderResults(s) {
         <div class="stat"><div class="val">${fmt(s.size)}</div><div class="lbl">総容量</div></div>
         <div class="stat"><div class="val" style="color:#27ae60">${normal.toLocaleString()}</div><div class="lbl">正常ファイル数</div></div>
         <div class="stat"><div class="val" style="color:#e74c3c">${corrupted.toLocaleString()}</div><div class="lbl">破損ファイル数</div></div>
+        ${thumbStat}
       </div>
     </div>
     <div class="card">
@@ -460,7 +507,8 @@ function renderResults(s) {
           <tbody>${buildRows(s.corrupted)}</tbody>
         </table>
       </div>
-    </div>`;
+    </div>
+    ${thumbCard}`;
 }
 
 // ── Save report ────────────────────────────────────────────────────────────
@@ -480,12 +528,22 @@ function saveReport() {
   const now   = new Date().toLocaleString('ja-JP');
   const modeLabel = gMode === 'deep' ? '詳細スキャン' : '通常スキャン';
 
+  const thumbs    = (s.thumbnails || []).length;
   const rows = corrupted === 0
     ? `<tr><td colspan="3" style="text-align:center;color:#aaa;padding:20px;">破損ファイルはありません</td></tr>`
     : s.corrupted.map(f => {
         const badges = f.reasons.map(r => `<span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:.78em;font-weight:bold;white-space:nowrap;margin:1px;${badgeStyle(r)}">${esc(r)}</span>`).join(' ');
         return `<tr><td style="word-break:break-all;padding:6px 10px;color:#555;">${esc(f.path)}</td><td style="padding:6px 10px;">${badges}</td><td style="padding:6px 10px;text-align:right;color:#888;">${fmt(f.size)}</td></tr>`;
       }).join('');
+  const thumbRows = gMode !== 'deep' ? '' : (thumbs === 0
+    ? `<tr><td colspan="3" style="text-align:center;color:#aaa;padding:20px;">サムネイル画像はありません</td></tr>`
+    : (s.thumbnails || []).map(f =>
+        `<tr><td style="word-break:break-all;padding:6px 10px;color:#555;">${esc(f.path)}</td><td style="padding:6px 10px;text-align:center;color:#888;">${f.w} × ${f.h}</td><td style="padding:6px 10px;text-align:right;color:#888;">${fmt(f.size)}</td></tr>`
+      ).join(''));
+  const thumbStatHtml = gMode === 'deep'
+    ? `<div class="s"><div class="v" style="color:#e67e22">${thumbs.toLocaleString()}</div><div class="l">サムネイル画像数</div></div>` : '';
+  const thumbCardHtml = gMode === 'deep'
+    ? `<div class="c"><h2>サムネイル画像一覧（${thumbs.toLocaleString()} 件）</h2><div class="sc"><table><thead><tr><th>ファイルパス</th><th style="text-align:center">サイズ（px）</th><th style="text-align:right">容量</th></tr></thead><tbody>${thumbRows}</tbody></table></div></div>` : '';
 
   const css = `*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Helvetica Neue',Arial,sans-serif;background:#f0f2f5;color:#333;padding:24px}h1{text-align:center;color:#2c3e50;font-size:1.7rem;margin-bottom:28px}.w{max-width:900px;margin:0 auto}.c{background:#fff;border-radius:12px;padding:22px;margin-bottom:20px;box-shadow:0 2px 10px rgba(0,0,0,.07)}.c h2{font-size:1rem;color:#2c3e50;border-bottom:2px solid #eee;padding-bottom:8px;margin-bottom:16px}.m{color:#888;font-size:.85rem;margin-bottom:4px}.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px}.s{text-align:center;background:#f8f9fa;border-radius:8px;padding:14px}.s .v{font-size:1.9rem;font-weight:700}.s .l{font-size:.8rem;color:#666;margin-top:4px}.rn{font-size:3.5rem;font-weight:700;text-align:center}.bb{background:#e9ecef;border-radius:50px;height:18px;overflow:hidden;margin:14px 0}.bf{height:100%;border-radius:50px}.rs{text-align:center;font-size:.9rem;color:#555}table{width:100%;border-collapse:collapse;font-size:.83rem}th{background:#f8f9fa;padding:8px 10px;text-align:left;font-weight:600;color:#555;border-bottom:2px solid #eee}td{border-bottom:1px solid #f0f0f0}.sc{max-height:360px;overflow-y:auto}`;
 
@@ -498,6 +556,7 @@ function saveReport() {
 <div class="s"><div class="v">${fmt(s.size)}</div><div class="l">総容量</div></div>
 <div class="s"><div class="v" style="color:#27ae60">${normal.toLocaleString()}</div><div class="l">正常ファイル数</div></div>
 <div class="s"><div class="v" style="color:#e74c3c">${corrupted.toLocaleString()}</div><div class="l">破損ファイル数</div></div>
+${thumbStatHtml}
 </div></div>
 <div class="c"><h2>復旧率</h2>
 <div class="rn" style="color:${color}">${rate.toFixed(1)}%</div>
@@ -506,6 +565,7 @@ function saveReport() {
 <div class="c"><h2>破損ファイル一覧（${corrupted.toLocaleString()} 件）</h2>
 <div class="sc"><table><thead><tr><th>ファイルパス</th><th>原因</th><th style="text-align:right">サイズ</th></tr></thead>
 <tbody>${rows}</tbody></table></div></div>
+${thumbCardHtml}
 </div></body></html>`;
 
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
