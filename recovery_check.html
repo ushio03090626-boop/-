@@ -283,16 +283,15 @@ async function endOk(file, type) {
 // ── Canvas image decode ────────────────────────────────────────────────────
 const CANVAS_LIMIT = 100 * 1024 * 1024; // 100 MB
 
-function getImageInfo(file) {
-  return new Promise(resolve => {
-    const url  = URL.createObjectURL(file);
-    const img  = new Image();
-    const done = (ok, w, h) => { URL.revokeObjectURL(url); resolve({ ok, w, h }); };
-    const timer = setTimeout(() => done(false, 0, 0), 10000);
-    img.onload  = () => { clearTimeout(timer); done(true,  img.naturalWidth, img.naturalHeight); };
-    img.onerror = () => { clearTimeout(timer); done(false, 0, 0); };
-    img.src = url;
-  });
+async function getImageInfo(file) {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const result = { ok: true, w: bitmap.width, h: bitmap.height };
+    bitmap.close();
+    return result;
+  } catch {
+    return { ok: false, w: 0, h: 0 };
+  }
 }
 
 function isThumbnailSize(w, h) {
