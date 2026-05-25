@@ -229,6 +229,14 @@ const SIGS = {
   '7z': { header:[0x37,0x7A,0xBC,0xAF,0x27,0x1C] },
   gz:   { header:[0x1F,0x8B] },
   bz2:  { header:[0x42,0x5A,0x68] },
+  // Graphics (non-image)
+  psd:  { header:[0x38,0x42,0x50,0x53] },
+  ai:   { special:'ai' },
+  // CAD
+  dwg:  { special:'dwg' },
+  // Email / PIM
+  pst:  { header:[0x21,0x42,0x44,0x4E] },
+  ost:  { header:[0x21,0x42,0x44,0x4E] },
 };
 
 // ── Header validation ──────────────────────────────────────────────────────
@@ -252,6 +260,14 @@ function headerOk(bytes, sig) {
     case 'tiff':
       return (bytes[0]===0x49 && bytes[1]===0x49 && bytes[2]===0x2A && bytes[3]===0x00) // LE
           || (bytes[0]===0x4D && bytes[1]===0x4D && bytes[2]===0x00 && bytes[3]===0x2A); // BE
+    case 'ai':
+      // PDF-based (AI 9+): %PDF
+      if (bytes[0]===0x25 && bytes[1]===0x50 && bytes[2]===0x44 && bytes[3]===0x46) return true;
+      // PostScript-based (AI 8 and earlier): %!PS
+      return bytes[0]===0x25 && bytes[1]===0x21 && bytes[2]===0x50 && bytes[3]===0x53;
+    case 'dwg':
+      // AutoCAD DWG: "AC" followed by version digits (AC1015, AC1018 …)
+      return bytes[0]===0x41 && bytes[1]===0x43;
     default: return true;
   }
 }
