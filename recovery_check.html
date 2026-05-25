@@ -128,7 +128,6 @@ tr:hover td { background: #fafafa; }
           <li>✓ 通常スキャンの全項目</li>
           <li>✓ ファイルヘッダー検証（30種類以上）</li>
           <li>✓ 末尾データ欠損（切断）検出</li>
-          <li>✓ 画像デコード検証</li>
           <li>✓ サムネイル画像識別（100〜999px）</li>
         </ul>
         <span class="tag tag-deep">低速・高精度</span>
@@ -300,47 +299,41 @@ function isThumbnailSize(w, h) {
   return w >= 100 && w <= 999 && h >= 100 && h <= 999;
 }
 
-// ── Deep check (called per file in deep mode) ──────────────────────────────
-// Returns { reasons[], isThumbnail, w, h }
+// ── Deep check: corruption only (header + end marker) ─────────────────────
+// Returns reasons[]
 async function deepCheck(file) {
-  const none = { reasons:[], isThumbnail:false, w:0, h:0 };
-  if (file.size === 0) return { reasons:['0バイト'], isThumbnail:false, w:0, h:0 };
-
+  if (file.size === 0) return ['0バイト'];
   const e   = fileExt(file.name);
   const sig = SIGS[e];
   const reasons = [];
 
-  // 1. Header
   if (sig) {
     let buf;
     try { buf = await file.slice(0, 16).arrayBuffer(); }
-    catch { return { reasons:['読み取り不可'], isThumbnail:false, w:0, h:0 }; }
+    catch { return ['読み取り不可']; }
     if (!headerOk(new Uint8Array(buf), sig))
       reasons.push('ヘッダー異常（形式不一致）');
   } else {
     try { await file.slice(0, 1).arrayBuffer(); }
-    catch { return { reasons:['読み取り不可'], isThumbnail:false, w:0, h:0 }; }
+    catch { return ['読み取り不可']; }
   }
 
-  // 2. End marker (only if header passed)
   if (sig?.end && reasons.length === 0) {
     try { if (!await endOk(file, sig.end)) reasons.push('末尾データ欠損（切断の可能性）'); }
     catch { /* ignore */ }
   }
 
-  // 3. Image decode + dimension check (only if no issues yet and size within limit)
-  if (sig?.canvas && reasons.length === 0 && file.size <= CANVAS_LIMIT) {
-    setStep(`画像デコード確認中: ${file.name}`);
-    const { ok, w, h } = await getImageInfo(file);
-    if (!ok) {
-      reasons.push('画像として読み込み不可（内部データ破損）');
-    } else if (isThumbnailSize(w, h)) {
-      return { reasons: [], isThumbnail: true, w, h };
-    }
-    return { reasons, isThumbnail: false, w, h };
-  }
+  return reasons;
+}
 
-  return { reasons, isThumbnail: false, w: 0, h: 0 };
+// ── Thumbnail check: dimension-only, independent of corruption ─────────────
+async function checkThumbnail(file) {
+  if (file.size === 0 || file.size > CANVAS_LIMIT) return null;
+  if (!SIGS[fileExt(file.name)]?.canvas) return null;
+  setStep(`サムネイル判定中: ${file.name}`);
+  const { ok, w, h } = await getImageInfo(file);
+  setStep('');
+  return (ok && isThumbnailSize(w, h)) ? { w, h } : null;
 }
 
 // ── Scan progress helpers ──────────────────────────────────────────────────
@@ -366,28 +359,29 @@ async function scanDir(dirHandle, path, stats) {
         stats.size += file.size;
         let reasons;
 
+        let reasons;
         if (gMode === 'deep') {
           setStep(`チェック中: ${name}`);
-          const result = await deepCheck(file);
+          reasons = await deepCheck(file);
           setStep('');
-          if (result.isThumbnail) {
-            stats.thumbnails.push({ path: full, size: file.size, w: result.w, h: result.h });
-            stats.normal++;
-          } else if (result.reasons.length === 0) {
-            stats.normal++;
-          } else {
-            stats.corrupted.push({ path: full, size: file.size, reasons: result.reasons });
-          }
         } else {
-          let reasons;
           if (file.size === 0) {
             reasons = ['0バイト'];
           } else {
             try { await file.slice(0, 1).arrayBuffer(); reasons = []; }
             catch { reasons = ['読み取り不可']; }
           }
-          if (reasons.length === 0) stats.normal++;
-          else stats.corrupted.push({ path: full, size: file.size, reasons });
+        }
+
+        if (reasons.length > 0) {
+          stats.corrupted.push({ path: full, size: file.size, reasons });
+        } else {
+          // サムネイル判定：破損チェックとは独立して最後に実行
+          const thumb = gMode === 'deep' ? await checkThumbnail(file) : null;
+          if (thumb) {
+            stats.thumbnails.push({ path: full, size: file.size, w: thumb.w, h: thumb.h });
+          }
+          stats.normal++;
         }
 
       } catch {
