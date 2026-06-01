@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>診断書作成ツール</title>
+<style>
+:root {
+  --primary: #2563eb;
+  --primary-light: #eff6ff;
+  --border: #e2e8f0;
+  --text: #1e293b;
+  --muted: #64748b;
+  --success: #16a34a;
+  --bg: #f8fafc;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Yu Gothic', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ===== Wizard ===== */
+.wizard { max-width: 860px; margin: 0 auto; padding: 28px 16px; }
+.wizard-title { font-size: 22px; font-weight: 700; margin-bottom: 28px; }
+
+.steps { display: flex; align-items: center; margin-bottom: 28px; }
+.step { display: flex; align-items: center; }
+.step-circle {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700;
+  background: #e2e8f0; color: var(--muted); flex-shrink: 0;
+}
+.step.active .step-circle  { background: var(--primary); color: #fff; }
+.step.done   .step-circle  { background: var(--success);  color: #fff; }
+.step-label { font-size: 12px; color: var(--muted); margin-left: 7px; white-space: nowrap; }
+.step.active .step-label { color: var(--primary); font-weight: 600; }
+.step.done   .step-label { color: var(--success); }
+.step-line { flex: 1; height: 2px; background: #e2e8f0; margin: 0 8px; }
+.step-line.done { background: var(--success); }
+
+.breadcrumb {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 10px 14px; background: #f1f5f9;
+  border-radius: 8px; font-size: 12px; margin-bottom: 16px;
+}
+.bc-item {
+  padding: 3px 10px; background: #fff;
+  border: 1px solid var(--border); border-radius: 20px; font-weight: 500;
+}
+.bc-sep { color: var(--muted); }
+
+.card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin-bottom: 14px; }
+.card-q { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.opt {
+  padding: 15px 18px; border: 2px solid var(--border); border-radius: 8px;
+  background: #fff; cursor: pointer; text-align: left;
+  font-size: 13px; font-weight: 500; color: var(--text);
+  transition: border-color .12s, background .12s, color .12s;
+  font-family: inherit;
+}
+.opt:hover, .opt.sel {
+  border-color: var(--primary); background: var(--primary-light); color: var(--primary);
+}
+.opt .icon { font-size: 22px; display: block; margin-bottom: 6px; }
+.opt .sub  { font-size: 11px; color: var(--muted); margin-top: 3px; font-weight: 400; }
+.opt.sel .sub { color: #3b82f6; }
+
+.acts { display: flex; gap: 10px; margin-top: 4px; }
+.btn {
+  padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 500;
+  cursor: pointer; border: none; font-family: inherit; transition: background .12s;
+}
+.btn-ghost { background: #fff; border: 1px solid var(--border); color: var(--text); }
+.btn-ghost:hover { background: #f1f5f9; }
+.btn-reset { background: #fff; border: 1px solid #fca5a5; color: #ef4444; }
+.btn-reset:hover { background: #fef2f2; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #1d4ed8; }
+
+/* ===== Preview ===== */
+.preview-wrap { max-width: 860px; margin: 0 auto; padding: 0 16px 48px; }
+.preview-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 14px;
+}
+.preview-bar-title { font-size: 15px; font-weight: 600; }
+.shadow-bg { background: #475569; padding: 18px; border-radius: 8px; display: flex; justify-content: center; }
+
+/* ===== A4 ===== */
+.a4 {
+  width: 210mm; min-height: 297mm;
+  background: #fff; padding: 18mm 18mm 22mm 22mm;
+  font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Yu Gothic', sans-serif;
+  font-size: 9.5pt; line-height: 1.65; color: #1e293b;
+  position: relative;
+}
+.dh {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  border-bottom: 2.5px solid #1e293b; padding-bottom: 10px; margin-bottom: 14px;
+}
+.dh-title { font-size: 20pt; font-weight: 700; letter-spacing: .12em; }
+.dh-sub   { font-size: 8.5pt; color: #64748b; margin-top: 3px; }
+.dh-co    { text-align: right; font-size: 8.5pt; color: #475569; }
+.dh-co strong { font-size: 10.5pt; display: block; font-weight: 700; color: #1e293b; }
+.meta-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 3px 20px;
+  padding: 10px 12px; background: #f8fafc;
+  border: 1px solid var(--border); border-radius: 4px; margin-bottom: 12px;
+}
+.mi { display: flex; gap: 6px; font-size: 8.5pt; align-items: baseline; }
+.ml { font-weight: 600; color: #475569; white-space: nowrap; min-width: 76px; }
+.mi input {
+  border: none; border-bottom: 1px solid #cbd5e1; outline: none;
+  font-family: inherit; font-size: 8.5pt; color: #1e293b;
+  background: transparent; width: 100%; padding: 1px 2px;
+}
+.sec { margin-bottom: 12px; }
+.sh {
+  font-size: 10pt; font-weight: 700; color: #fff;
+  background: #334155; padding: 3px 10px; margin-bottom: 7px;
+}
+.sc { padding: 0 10px; }
+.fr { display: flex; gap: 8px; margin-bottom: 5px; align-items: baseline; flex-wrap: wrap; }
+.fl { font-weight: 600; font-size: 8.5pt; color: #475569; white-space: nowrap; min-width: 88px; }
+.fv { font-size: 8.5pt; }
+.fv.e {
+  border-bottom: 1px solid #cbd5e1; outline: none;
+  font-family: inherit; background: transparent; flex: 1; min-width: 120px;
+}
+.tag {
+  display: inline-block; padding: 1px 8px; border-radius: 3px;
+  font-size: 8pt; font-weight: 600;
+}
+.tag-b  { background: #dbeafe; color: #1d4ed8; }
+.tag-g  { background: #dcfce7; color: #15803d; }
+.tag-o  { background: #ffedd5; color: #c2410c; }
+.tag-r  { background: #fee2e2; color: #dc2626; }
+.tag-p  { background: #f3e8ff; color: #7c3aed; }
+.dt {
+  width: 100%; border-collapse: collapse; font-size: 8.5pt;
+}
+.dt th {
+  background: #f1f5f9; padding: 5px 8px; text-align: left;
+  font-weight: 600; border: 1px solid #e2e8f0;
+}
+.dt td { padding: 5px 8px; border: 1px solid #e2e8f0; vertical-align: top; }
+.meter-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+.meter-bar  { flex: 1; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+.meter-fill { height: 100%; border-radius: 4px; }
+.sign-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 16px; }
+.sign-box { border: 1px solid #e2e8f0; padding: 7px 10px; text-align: center; }
+.sign-lbl { font-size: 8pt; color: #64748b; margin-bottom: 22px; }
+.sign-line { border-bottom: 1px solid #334155; }
+.df {
+  position: absolute; bottom: 16mm; left: 22mm; right: 18mm;
+  border-top: 1px solid #e2e8f0; padding-top: 6px;
+  display: flex; justify-content: space-between; font-size: 7.5pt; color: #94a3b8;
+}
+
+.hidden { display: none !important; }
+
+@media print {
+  body { background: #fff; }
+  .wizard { display: none; }
+  .preview-wrap { padding: 0; max-width: 100%; }
+  .preview-bar  { display: none; }
+  .shadow-bg { background: none; padding: 0; }
+  .a4 { width: 100%; min-height: auto; padding: 12mm; }
+  .mi input, .fv.e { border-bottom: 1px solid #ccc; }
+}
+</style>
+</head>
+<body>
+
+<!-- Wizard -->
+<div class="wizard" id="wizard">
+  <div class="wizard-title">診断書作成ツール</div>
+  <div class="steps" id="stepBar"></div>
+  <div class="breadcrumb hidden" id="bc"></div>
+  <div class="card" id="card">
+    <div class="card-q" id="cardQ"></div>
+    <div class="grid"  id="cardGrid"></div>
+  </div>
+  <div class="acts">
+    <button class="btn btn-ghost hidden" id="btnBack"  onclick="back()">← 戻る</button>
+    <button class="btn btn-reset hidden" id="btnReset" onclick="reset()">リセット</button>
+  </div>
+</div>
+
+<!-- Preview -->
+<div class="preview-wrap hidden" id="preview">
+  <div class="preview-bar">
+    <div class="preview-bar-title">診断書プレビュー（A4）</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost"    onclick="reset()">← 最初から</button>
+      <button class="btn btn-primary"  onclick="window.print()">印刷する</button>
+    </div>
+  </div>
+  <div class="shadow-bg">
+    <div class="a4" id="a4"></div>
+  </div>
+</div>
+
+<script>
+const STEPS = [
+  {
+    id: 'product', label: '製品種別',
+    q: '対象製品の種別を選択してください',
+    opts: [
+      { v: 'desktop',  l: 'デスクトップ PC', icon: '[PC]',   d: 'タワー型・省スペース型 PC' },
+      { v: 'laptop',   l: 'ノート PC',        icon: '[NB]',   d: 'ノート・ウルトラブック' },
+      { v: 'external', l: '外付けストレージ', icon: '[EXT]',  d: '外付け HDD / SSD ケース' },
+      { v: 'server',   l: 'サーバー / NAS',   icon: '[SRV]',  d: 'ファイルサーバー・NAS 装置' }
+    ]
+  },
+  {
+    id: 'storage', label: 'ストレージ種別',
+    q: 'ストレージの種別を選択してください',
+    opts: [
+      { v: 'hdd', l: 'HDD', icon: '[HDD]', d: 'ハードディスクドライブ（磁気式）' },
+      { v: 'ssd', l: 'SSD', icon: '[SSD]', d: 'ソリッドステートドライブ（フラッシュ式）' }
+    ]
+  },
+  {
+    id: 'failure', label: '障害種別',
+    q: '障害の種別を選択してください',
+    opts: [
+      { v: 'physical', l: '物理障害', icon: '[PHY]', d: '機械的・電気的な物理的損傷' },
+      { v: 'logical',  l: '論理障害', icon: '[LOG]', d: 'データ・FW の論理的破損' }
+    ]
+  },
+  {
+    id: 'detail', label: '詳細分類',
+    q: '詳細な障害分類を選択してください',
+    opts: [
+      { v: 'fs', l: 'FS 破損', icon: '[FS]', d: 'ファイルシステム破損' },
+      { v: 'fw', l: 'FW 破損', icon: '[FW]', d: 'ファームウェア破損' }
+    ]
+  }
+];
+
+let cur = 0;
+let sel = {};
+
+const TEMPLATES = {
+  hdd_physical_fs: {
+    summary: 'HDD 物理障害 / ファイルシステム破損',
+    badge: '物理障害', badgeCls: 'tag-r',
+    cause: '物理的なヘッドクラッシュや磁気面の損傷により、データ記録面のファイルシステム管理領域が破損した状態です。',
+    symptoms: [
+      '異音（カチカチ・クリック音・グラインド音）の発生',
+      'OS が起動しない・ドライブが認識されない',
+      '認識されても読み取り中にフリーズする',
+      'BIOS/UEFI での検出が不安定'
+    ],
+    diagnosis: 'ヘッドアセンブリまたは磁気プラッタの損傷を確認。物理的損傷によりファイルシステム領域（MBR/GPT）への正常なアクセスが不可能。クリーンルーム環境での作業が必要と判断。',
+    pct: 35, recLbl: '低〜中（物理損傷の程度による）', recCls: 'tag-r', recColor: '#dc2626',
+    actions: [
+      'クリーンルーム環境でのヘッドアセンブリ交換またはプラッタ移植',
+      '物理復旧後、TestDisk 等によるファイルシステム修復',
+      'イメージ取得を優先し、復旧作業はコピー上で実施'
+    ],
+    note: '自己修復の試みは損傷を悪化させます。電源の入れ直しを避け、速やかに専門業者へご相談ください。'
+  },
+  hdd_physical_fw: {
+    summary: 'HDD 物理障害 / ファームウェア領域破損（SA 損傷）',
+    badge: '物理障害', badgeCls: 'tag-r',
+    cause: 'HDD のサービスエリア（SA）と呼ばれるファームウェア格納領域がプラッタ上で物理的に損傷した状態です。SA は通常の OS からはアクセスできない特殊領域に記録されています。',
+    symptoms: [
+      'ドライブが回転するが認識されない（Busy 状態）',
+      'BIOS/UEFI に表示されない',
+      '容量が 0 またはデタラメな値で認識される',
+      '電源投入後に応答なくタイムアウトする'
+    ],
+    diagnosis: 'SA 領域への読み取りコマンドが無応答。ファームウェアのロードに失敗しているため、通常のアクセスが完全に不可能。専用診断機材（PC-3000 等）による直接アクセスが必要。',
+    pct: 50, recLbl: '中（同型番 FW 調達が可能な場合）', recCls: 'tag-o', recColor: '#d97706',
+    actions: [
+      'PC-3000 等の専用機材による SA への直接ファームウェアアクセス',
+      '同型番・同リビジョンのドライブから SA 情報を取得',
+      'ファームウェアの書き換えによるドライブの復旧',
+      'SA 修復後、データイメージの取得'
+    ],
+    note: '同型番のドライブが入手できない場合、復旧が困難になります。作業前にモデル番号・製造日（Date Code）を確認してください。'
+  },
+  hdd_logical_fs: {
+    summary: 'HDD 論理障害 / ファイルシステム破損',
+    badge: '論理障害', badgeCls: 'tag-o',
+    cause: '不正なシャットダウン、ウイルス感染、またはソフトウェアエラーにより、ファイルシステムの管理情報（MBR/GPT、パーティションテーブル、FAT/inode 等）が論理的に破損した状態です。',
+    symptoms: [
+      'OS が起動しない（"Operating System not found" 等のエラー）',
+      'ドライブは認識されるがアクセスできない',
+      '「ドライブをフォーマットする必要があります」と表示される',
+      'ファイルやフォルダが消えている・アクセスできない',
+      'chkdsk / fsck でエラーが検出される'
+    ],
+    diagnosis: 'ドライブは正常に認識。S.M.A.R.T. 値に物理的異常なし。ファイルシステム整合性チェックにてエラーを多数検出。パーティション情報またはファイルシステム管理領域の破損を確認。データは物理的に存在している可能性が高い。',
+    pct: 80, recLbl: '高（データが物理的に存在する可能性大）', recCls: 'tag-g', recColor: '#16a34a',
+    actions: [
+      'ddrescue 等によるドライブイメージの取得（作業前に必須）',
+      'TestDisk / PhotoRec によるパーティション・FS 修復',
+      'chkdsk /f（Windows）または fsck（Linux）による整合性修復',
+      '修復不可の場合はファイルカービングによるデータ抽出'
+    ],
+    note: '復旧作業は必ずイメージコピー上で実施してください。元ドライブへの書き込みはデータ上書きのリスクがあります。'
+  },
+  hdd_logical_fw: {
+    summary: 'HDD 論理障害 / ファームウェア破損（ROM/SA 論理破損）',
+    badge: '論理障害', badgeCls: 'tag-o',
+    cause: 'HDD のファームウェア（PCB 上の ROM またはサービスエリア）が FW アップデート失敗や突然の電源断により論理的に破損した状態です。コントロール基板は物理的に正常ですが、FW の初期化に失敗しています。',
+    symptoms: [
+      'BIOS/UEFI で認識されるが容量が 0 と表示される',
+      'ドライブが "BSY（Busy）" 状態で固まる',
+      'S.M.A.R.T. 情報が取得できない',
+      '特定モデルで既知のファームウェアバグが疑われる'
+    ],
+    diagnosis: 'ドライブはスピンアップするが正常な IDEM 応答なし。FW の初期化処理に失敗していると判断。ROM 書き換えによる修復の可能性あり。S.M.A.R.T. 値取得不可。',
+    pct: 55, recLbl: '中（FW 再書き込みが成功した場合）', recCls: 'tag-o', recColor: '#d97706',
+    actions: [
+      '同型番ドライブの ROM から正常なファームウェアを取得',
+      'PC-3000 / MRT 等の専用ツールで FW を書き込み',
+      '特定モデルの既知バグに該当する場合は公開パッチを適用',
+      'FW 修復後にデータ取得作業を実施'
+    ],
+    note: '一部メーカー（Seagate 等）では FW バグの既知情報があります。モデル番号を確認の上、対象バグへの該当を確認してください。'
+  },
+  ssd_physical_fs: {
+    summary: 'SSD 物理障害 / ファイルシステム破損',
+    badge: '物理障害', badgeCls: 'tag-r',
+    cause: 'NAND フラッシュメモリの物理的劣化（書き込み回数超過・セルの物理破損）により、ファイルシステム管理データが格納されているセルが読み取り不能になった状態です。',
+    symptoms: [
+      '突然ドライブが認識されなくなる',
+      '認識されても読み書きが異常に遅い',
+      '一部ファイルが破損・消失している',
+      'S.M.A.R.T. でメディアエラーカウントが急増',
+      'TBW（書き込み耐久値）が上限に近い・超過している'
+    ],
+    diagnosis: 'S.M.A.R.T. 診断にて NAND エラーカウントの異常値を検出。メモリセルの物理的劣化により ECC 訂正不能なエラーが発生。ファイルシステム領域の一部が物理的に読み取り不能な状態。',
+    pct: 30, recLbl: '低〜中（破損セル数と配置による）', recCls: 'tag-r', recColor: '#dc2626',
+    actions: [
+      '専用機材による NAND チップへの直接アクセス（チップオフ）',
+      'NAND ダンプの取得とウェアレベリングテーブルの解析',
+      '取得データからファイルシステム再構成',
+      '読み取り可能なセクタからのデータカービング'
+    ],
+    note: 'SSD の物理障害は復旧難易度が高く費用も高額になる場合があります。TRIM が有効な場合、削除ファイルの復旧は困難です。'
+  },
+  ssd_physical_fw: {
+    summary: 'SSD 物理障害 / コントローラー物理破損',
+    badge: '物理障害', badgeCls: 'tag-r',
+    cause: 'SSD のコントローラーチップが静電気・過電圧・落下等の物理的衝撃により損傷した状態です。コントローラー IC が機能不全に陥り、NAND フラッシュへのアクセス経路が断絶されています。',
+    symptoms: [
+      'ドライブが全く認識されない（電源を入れても反応なし）',
+      'ドライブが異常に発熱する',
+      'コントローラーチップ周辺に焦げや損傷が見られる',
+      '接続時に PC 全体がフリーズする'
+    ],
+    diagnosis: 'コントローラー IC の物理損傷を目視確認。通電時の電流値異常。NAND フラッシュチップ自体は正常な可能性があるが、コントローラー経由でのアクセスが完全に不可能な状態。',
+    pct: 40, recLbl: '低〜中（NAND チップが無事な場合）', recCls: 'tag-r', recColor: '#dc2626',
+    actions: [
+      'コントローラーチップの交換（同一型番が入手できる場合）',
+      'チップオフによる NAND フラッシュの直接読み取り',
+      '読み取った NAND ダンプから FTL（フラッシュ変換層）を解析',
+      'データの再構成と抽出'
+    ],
+    note: 'コントローラーチップの交換は同一型番の調達が必須です。チップオフ作業は専門設備が必要です。'
+  },
+  ssd_logical_fs: {
+    summary: 'SSD 論理障害 / ファイルシステム破損',
+    badge: '論理障害', badgeCls: 'tag-o',
+    cause: '不正なシャットダウン、FW バグ、またはソフトウェアエラーにより SSD 上のファイルシステム管理情報が論理的に破損した状態です。物理的な NAND セルは正常です。',
+    symptoms: [
+      'ドライブは認識されるがアクセスできない',
+      '「フォーマットが必要です」と表示される',
+      'ファイルやフォルダが突然消失した',
+      'OS 起動時にエラーが発生する',
+      'ファイルのコピー中にエラーが発生する'
+    ],
+    diagnosis: 'ドライブは正常に認識。S.M.A.R.T. 値に物理的異常なし。ファイルシステム整合性チェックでエラーを検出。パーティション情報またはファイルアロケーション情報の論理的破損を確認。TRIM の状態を確認中。',
+    pct: 75, recLbl: '高（TRIM 無効または接続直後の場合）', recCls: 'tag-g', recColor: '#16a34a',
+    actions: [
+      'TRIM コマンドの実行を停止（これ以上の電源投入を避ける）',
+      'ドライブイメージの取得（最優先事項）',
+      'PhotoRec / R-Studio による RAW 復旧',
+      'TestDisk によるパーティション情報の修復',
+      'TRIM 有効環境では削除ファイルの復旧は困難'
+    ],
+    note: 'SSD は TRIM 機能により削除データが短時間で消去される場合があります。電源投入を最小限にし、速やかにイメージ取得を行うことが重要です。'
+  },
+  ssd_logical_fw: {
+    summary: 'SSD 論理障害 / ファームウェア破損',
+    badge: '論理障害', badgeCls: 'tag-o',
+    cause: 'SSD のファームウェアが FW アップデート失敗、突然の電源断、または製造上のバグにより論理的に破損した状態です。コントローラーは物理的に正常ですが、FW の実行に失敗しています。',
+    symptoms: [
+      'ドライブが認識されない、または容量が 0 と表示される',
+      '書き込みができず読み取り専用になる',
+      'ファームウェアアップデート後から認識されなくなった',
+      'S.M.A.R.T. 情報が取得できない',
+      'DFU モード（工場出荷時リセットモード）への移行が確認される'
+    ],
+    diagnosis: 'SSD はスピンアップするが正常なデバイス情報を返さない。FW の初期化失敗を確認。メーカー診断ツールで DFU モードを検出。ハードウェア自体に物理的異常なし。',
+    pct: 60, recLbl: '中（メーカー対応または専用ツールが利用可能な場合）', recCls: 'tag-o', recColor: '#d97706',
+    actions: [
+      'メーカー公式の FW 修復ツールの確認・適用',
+      '同モデルの正常な FW イメージの入手',
+      'UART または JTAG インターフェースを使用した FW 書き込み',
+      'FW 修復後のデータ取得作業'
+    ],
+    note: '一部の SSD メーカーは既知の FW バグに対してリカバリツールを公開しています。型番・FW バージョンを確認してください。'
+  }
+};
+
+const productLabel  = { desktop: 'デスクトップ PC', laptop: 'ノート PC', external: '外付けストレージ', server: 'サーバー / NAS' };
+const storageLabel  = { hdd: 'HDD（ハードディスクドライブ）', ssd: 'SSD（ソリッドステートドライブ）' };
+const failureLabel  = { physical: '物理障害', logical: '論理障害' };
+const detailLabel   = { fs: 'FS 破損（ファイルシステム破損）', fw: 'FW 破損（ファームウェア破損）' };
+
+function init() { renderBar(); renderStep(); }
+
+function renderBar() {
+  const bar = document.getElementById('stepBar');
+  bar.innerHTML = '';
+  STEPS.forEach((s, i) => {
+    const d = document.createElement('div');
+    d.className = 'step' + (i < cur ? ' done' : i === cur ? ' active' : '');
+    d.innerHTML = `<div class="step-circle">${i < cur ? '&#10003;' : i + 1}</div><div class="step-label">${s.label}</div>`;
+    bar.appendChild(d);
+    if (i < STEPS.length - 1) {
+      const ln = document.createElement('div');
+      ln.className = 'step-line' + (i < cur ? ' done' : '');
+      bar.appendChild(ln);
+    }
+  });
+}
+
+function renderStep() {
+  const step = STEPS[cur];
+  document.getElementById('cardQ').textContent = step.q;
+  const grid = document.getElementById('cardGrid');
+  grid.innerHTML = '';
+  step.opts.forEach(o => {
+    const b = document.createElement('button');
+    b.className = 'opt' + (sel[step.id] === o.v ? ' sel' : '');
+    b.innerHTML = `<span class="icon">${o.icon}</span>${o.l}<div class="sub">${o.d}</div>`;
+    b.onclick = () => pick(step.id, o.v, o.l);
+    grid.appendChild(b);
+  });
+
+  // breadcrumb
+  const bc = document.getElementById('bc');
+  if (cur > 0) {
+    bc.classList.remove('hidden');
+    bc.innerHTML = '';
+    STEPS.slice(0, cur).forEach((s, i) => {
+      if (i > 0) { const sp = document.createElement('span'); sp.className = 'bc-sep'; sp.textContent = '›'; bc.appendChild(sp); }
+      const it = document.createElement('span');
+      it.className = 'bc-item';
+      const o = s.opts.find(x => x.v === sel[s.id]);
+      it.textContent = `${s.label}: ${o ? o.l : '-'}`;
+      bc.appendChild(it);
+    });
+  } else {
+    bc.classList.add('hidden');
+  }
+
+  document.getElementById('btnBack').classList.toggle('hidden', cur === 0);
+  document.getElementById('btnReset').classList.toggle('hidden', cur === 0);
+}
+
+function pick(id, v) {
+  sel[id] = v;
+  if (cur < STEPS.length - 1) {
+    cur++;
+    renderBar();
+    renderStep();
+  } else {
+    showPreview();
+  }
+}
+
+function back() {
+  if (cur > 0) {
+    delete sel[STEPS[cur].id];
+    cur--;
+    renderBar();
+    renderStep();
+    document.getElementById('preview').classList.add('hidden');
+    document.getElementById('card').classList.remove('hidden');
+  }
+}
+
+function reset() {
+  cur = 0; sel = {};
+  renderBar(); renderStep();
+  document.getElementById('preview').classList.add('hidden');
+  document.getElementById('wizard').classList.remove('hidden');
+  document.getElementById('card').classList.remove('hidden');
+  document.getElementById('bc').classList.add('hidden');
+  document.getElementById('btnBack').classList.add('hidden');
+  document.getElementById('btnReset').classList.add('hidden');
+}
+
+function showPreview() {
+  document.getElementById('card').classList.add('hidden');
+  document.getElementById('preview').classList.remove('hidden');
+  buildA4();
+}
+
+function buildA4() {
+  const { product, storage, failure, detail } = sel;
+  const T = TEMPLATES[`${storage}_${failure}_${detail}`];
+  if (!T) { document.getElementById('a4').innerHTML = '<p style="padding:20px;color:red;">テンプレートが見つかりません</p>'; return; }
+
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日`;
+  const caseNo  = 'D' + now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0') + '-' + (Math.random()*9000+1000|0);
+
+  const syRows  = T.symptoms.map(s => `<tr><td>・${s}</td></tr>`).join('');
+  const acRows  = T.actions.map((a, i) => `<tr><td style="text-align:center;font-weight:700;width:36px;">${i+1}</td><td>${a}</td></tr>`).join('');
+
+  document.getElementById('a4').innerHTML = `
+    <div class="dh">
+      <div>
+        <div class="dh-title">診　断　書</div>
+        <div class="dh-sub">Storage Media Diagnostic Report</div>
+      </div>
+      <div class="dh-co">
+        <strong>データ復旧サービス</strong>
+        〒000-0000 ○○県○○市○○町0-0-0<br>
+        TEL: 0120-XXX-XXX<br>
+        <span class="tag tag-b" style="margin-top:5px;display:inline-block;">診断番号: ${caseNo}</span>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sh">■ 基本情報</div>
+      <div class="meta-grid">
+        <div class="mi"><span class="ml">診断日：</span><span>${dateStr}</span></div>
+        <div class="mi"><span class="ml">担当者：</span><input placeholder="担当者名を入力" /></div>
+        <div class="mi"><span class="ml">お客様名：</span><input placeholder="お客様名を入力" /></div>
+        <div class="mi"><span class="ml">ご連絡先：</span><input placeholder="電話番号 / メール" /></div>
+        <div class="mi"><span class="ml">会社名：</span><input placeholder="（任意）" /></div>
+        <div class="mi"><span class="ml">受付方法：</span><input placeholder="持込 / 宅配 / その他" /></div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sh">■ 対象機器情報</div>
+      <div class="sc">
+        <div class="fr">
+          <span class="fl">製品種別：</span><span class="fv">${productLabel[product]}</span>
+          &ensp;
+          <span class="fl">ストレージ：</span><span class="fv">${storageLabel[storage]}</span>
+        </div>
+        <div class="fr">
+          <span class="fl">メーカー：</span><input class="fv e" placeholder="メーカー名" style="max-width:140px" />
+          &ensp;
+          <span class="fl">型番：</span><input class="fv e" placeholder="型番" style="max-width:140px" />
+        </div>
+        <div class="fr">
+          <span class="fl">シリアル番号：</span><input class="fv e" placeholder="S/N" style="max-width:160px" />
+          &ensp;
+          <span class="fl">容量：</span><input class="fv e" placeholder="例: 1TB" style="max-width:90px" />
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sh">■ 診断分類</div>
+      <div class="sc">
+        <div class="fr" style="gap:14px;flex-wrap:wrap;">
+          <span><span class="tag tag-b">ストレージ</span>&nbsp;${storage.toUpperCase()}</span>
+          <span><span class="tag ${T.badgeCls}">障害種別</span>&nbsp;${failureLabel[failure]}</span>
+          <span><span class="tag tag-p">詳細分類</span>&nbsp;${detailLabel[detail]}</span>
+        </div>
+        <div style="margin-top:7px;font-size:9pt;font-weight:700;color:#334155;">${T.summary}</div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sh">■ 障害原因</div>
+      <div class="sc" style="font-size:9pt;line-height:1.75;">${T.cause}</div>
+    </div>
+
+    <div class="sec">
+      <div class="sh">■ 確認された症状</div>
+      <div class="sc">
+        <table class="dt">${syRows}</table>
+        <div class="fr" style="margin-top:6px;">
+          <span class="fl">その他症状：</span><input class="fv e" placeholder="ヒアリング内容等を入力" />
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sh">■ 診断結果</div>
+      <div class="sc">
+        <div style="font-size:9pt;line-height:1.75;margin-bottom:7px;">${T.diagnosis}</div>
+        <div class="fr">
+          <span class="fl">追記事項：</span><input class="fv e" placeholder="診断時の特記事項を入力" />
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sh">■ データ復旧可能性</div>
+      <div class="sc">
+        <div class="meter-row">
+          <span style="font-size:9pt;min-width:36px;">${T.pct}%</span>
+          <div class="meter-bar"><div class="meter-fill" style="width:${T.pct}%;background:${T.recColor};"></div></div>
+          <span class="tag ${T.recCls}">${T.recLbl}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sh">■ 推奨対応手順</div>
+      <div class="sc">
+        <table class="dt">
+          <tr><th style="width:36px;">順序</th><th>対応内容</th></tr>
+          ${acRows}
+        </table>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sh">■ 注意事項・所見</div>
+      <div class="sc">
+        <div style="font-size:9pt;line-height:1.75;color:#dc2626;font-weight:500;">注意: ${T.note}</div>
+        <div class="fr" style="margin-top:7px;">
+          <span class="fl">担当者所見：</span><input class="fv e" placeholder="担当者の所見・メモを入力" />
+        </div>
+      </div>
+    </div>
+
+    <div class="sign-row">
+      <div class="sign-box"><div class="sign-lbl">診断担当者</div><div class="sign-line"></div></div>
+      <div class="sign-box"><div class="sign-lbl">確認者</div><div class="sign-line"></div></div>
+      <div class="sign-box"><div class="sign-lbl">お客様確認</div><div class="sign-line"></div></div>
+    </div>
+
+    <div class="df">
+      <span>${caseNo} | ${dateStr}</span>
+      <span>本診断書は診断時点での情報に基づくものです。</span>
+    </div>
+  `;
+}
+
+init();
+</script>
+</body>
+</html>
